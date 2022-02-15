@@ -74,6 +74,8 @@ private:
   torch::jit::script::Module fInductionModule;
   torch::jit::script::Module fCollectionModule;
   const std::string fInputLabel;
+  const bool fInfillBadChannels;
+  const bool fInfillNoisyChannels;
 };
 
 Infill::InfillChannels::InfillChannels(fhicl::ParameterSet const& p)
@@ -81,7 +83,9 @@ Infill::InfillChannels::InfillChannels(fhicl::ParameterSet const& p)
     fNetworkPath           (p.get<std::string> ("NetworkPath")),
     fNetworkNameInduction  (p.get<std::string> ("NetworkNameInduction")),
     fNetworkNameCollection (p.get<std::string> ("NetworkNameCollection")),
-    fInputLabel            (p.get<std::string> ("InputLabel"))
+    fInputLabel            (p.get<std::string> ("InputLabel")),
+    fInfillBadChannels     (p.get<bool>        ("InfillBadChannels")),
+    fInfillNoisyChannels   (p.get<bool>        ("InfillNoisyChannels"))
 {
   consumes<std::vector<raw::RawDigit>>(fInputLabel);
 
@@ -183,10 +187,18 @@ void Infill::InfillChannels::beginJob()
   fBadChannels = art::ServiceHandle<lariov::ChannelStatusService const>()->GetProvider().BadChannels();
   fNoisyChannels = art::ServiceHandle<lariov::ChannelStatusService const>()->GetProvider().NoisyChannels();
 
-  std::merge(
-    fBadChannels.begin(), fBadChannels.end(), fNoisyChannels.begin(), fNoisyChannels.end(), 
-    std::inserter(fDeadChannels, fDeadChannels.begin())
-  );
+  if (fInfillBadChannels && fInfillNoisyChannels) {
+    std::merge(
+      fBadChannels.begin(), fBadChannels.end(), fNoisyChannels.begin(), fNoisyChannels.end(), 
+      std::inserter(fDeadChannels, fDeadChannels.begin())
+    );
+  }
+  else if (fInfillBadChannels) {
+    fDeadChannels.insert(fBadChannels.begin(), fBadChannels.end());
+  }
+  else if (fInfillNoisyChannels) {
+    fDeadChannels.insert(fNoisyChannels.begin(), fNoisyChannels.end());
+  }
 
   // Get active ROPs (not facing a wall and has dead channels)
   geo::ROP_id_iterator iRop, rBegin(fGeom, geo::ROP_id_iterator::begin_pos), 
@@ -208,12 +220,12 @@ void Infill::InfillChannels::beginJob()
       if (tpcVol->Capacity() > 1000000) { // At least one of the ROP's TPCIDs needs to be active
         // Networks expect a fixed image size
         if(fGeom->SignalType(*iRop) == geo::kInduction && fGeom->Nchannels(*iRop) > 800) {
-	  std::cerr << "InfillChannels_module.cc: Induction view network cannot handle more then 800 channels\n";
-	  std::abort();
+          std::cerr << "InfillChannels_module.cc: Induction view network cannot handle more then 800 channels\n";
+          std::abort();
         }
         if(fGeom->SignalType(*iRop) == geo::kCollection && fGeom->Nchannels(*iRop) > 480) {
-	  std::cerr << "InfillChannels_module.cc: Collection view network cannot handle more then 400 channels\n";
-	  std::abort();
+          std::cerr << "InfillChannels_module.cc: Collection view network cannot handle more then 480 channels\n";
+          std::abort();
         }
 
         fActiveRops.insert(*iRop);
@@ -231,11 +243,11 @@ void Infill::InfillChannels::beginJob()
     }
     if (fGeom->ChannelToROP(ch - chGap) == fGeom->ChannelToROP(ch + 1)) {
       if (fGeom->SignalType(ch) == geo::kCollection && chGap > 3) {
-        std::cerr << "There are dead channel gap larger than what was seen in training --- ";
+        std::cerr << "There are dead channel gaps > 3 which have not been seen in training --- ";
         std::cerr << "**Consider retraining collection plane infill network**" << std::endl;
       }
       else if (fGeom->SignalType(ch) == geo::kInduction && chGap > 2) {
-        std::cerr << "There are dead channel gap larger than what was seen in training --- ";
+        std::cerr << "There are dead channel gaps > 2 which have not been seen in training --- ";
         std::cerr << "**Consider retraining induction plane infill network**" << std::endl;
       }
     }
