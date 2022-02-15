@@ -2,13 +2,15 @@ BEGIN_PROLOG
 
 InfillChannels:
 {
-    module_type:             "InfillChannels"
+    module_type: "InfillChannels"
 
-    NetworkPath:	     "DUNE_PARDATA_DIR"
-    NetworkNameInduction:    "InfillChannels/unetdense_induct800_small_68e_070421.pt"
-    NetworkNameCollection:   "InfillChannels/unetdense_collect_small_22e_150321.pt"
+    NetworkPath:	       "DUNE_PARDATA_DIR"
+    NetworkNameInduction:  "InfillChannels/unetdense_induct800_small_68e_070421.pt"
+    NetworkNameCollection: "InfillChannels/unetdense_collect_small_22e_150321.pt"
 
-    InputLabel:              "daq"
+    InputLabel:          "tpcrawdecoder:daq"
+    InfillBadChannels:   true
+    InfillNoisyChannels: false
 }
 
 END_PROLOG
